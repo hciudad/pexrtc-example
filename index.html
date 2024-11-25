@@ -1,0 +1,154 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="x-ua-compatible" content="ie=edge" />
+  <title>PexRTC Example</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="images/pexip-favicon.png" />
+  <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/css/bootstrap.min.css"
+        integrity="sha512-SbiR/eusphKoMVVXysTKG/7VseWii+Y3FdHrt0EpKgpToZeemhqHeZeLWLhJutz/2ut2Vw1uQEj2MbRF+TVBUA=="
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer" />
+  <script defer
+        src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/js/bootstrap.min.js"
+        integrity="sha512-1/RvZTcCDEUjY/CypiMz+iqqtaoQfAITmNSJY17Myp4Ms5mdxPS5UV7iOfdZoxcGhzFbOm6sntTKJppjvuhg4g=="
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer"></script>
+  <script defer src="js/pexrtc.js"></script>
+</head>
+<body>
+  <div class="container">
+    <main>
+      <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">PexRTC Example</h1>
+      </div>
+      <div class="container-fluid px-0">
+          <div class="video-wrapper">
+              <section class="section">
+                  <div class="container">
+                        <div class="row">
+                          <div class="col">
+                            <label for="txt-conf-node">Conf Node</label>
+                            <input type="text" class="form-control" id="txt-conf-node" placeholder="Conference Node FQDN">
+                          </div>
+                          <div class="col">
+                            <label for="txt-conf-alias">Conf Alias</label>
+                            <input type="text" class="form-control" id="txt-conf-alias" placeholder="Name/Alias of VMR">
+                          </div>
+                          <div class="col">
+                            <label for="txt-conf-display-name">Caller's Name</label>
+                            <input type="text" class="form-control" id="txt-conf-display-name" placeholder="Name of person making the call" value="Jane Customer">
+                          </div>
+                          <div class="col">
+                            <label for="txt-conf-pin">PIN</label>
+                            <input type="text" class="form-control" id="txt-conf-pin" placeholder="PIN for VMR" value="2222">
+                          </div>
+                        </div>
+                      <div class="py-2" id="call-controls-inactive">
+                          <button type="button" id="call-agent" class="btn btn-primary">Call Agent</button>
+                      </div>
+                      <div class="py-2 d-none" id="call-controls-active">
+                          <button type="button" id="btn-disconnect" class="btn btn-danger">Disconnect</button>
+                      </div>
+                      <div style='overflow:auto' class="vidstage d-none" id="video-wrapper">
+                          <video id="pexip-video-container" poster="images/loading.gif" class="mediastream" muted autoplay="autoplay"/><br>
+                      </div>
+                  </div>
+              </section>
+          </div>
+      </div>
+    </main>
+
+  </div>
+    <script>
+      let callControlsActive = document.querySelector("#call-controls-active");
+      let callControlsInactive = document.querySelector("#call-controls-inactive");
+      let callAgentBtn = document.querySelector("button#call-agent");
+      let callDisconnectBtn = document.querySelector("button#btn-disconnect");
+      let videoElement = document.querySelector("#pexip-video-container");
+      let videoElementWrapper = document.querySelector("#video-wrapper");
+      let confNodeText = document.querySelector("#txt-conf-node");
+      let confAliasText = document.querySelector("#txt-conf-alias");
+      let confDisplayNameText = document.querySelector("#txt-conf-display-name");
+      let confPinText = document.querySelector("#txt-conf-pin");
+      let pexrtc;
+
+      videoElement.addEventListener('ended', () => videoElement.load());
+
+      const _hangupHandler = (event) => {
+        pexrtc.disconnect();
+        videoElement.src = "";
+      }
+
+      const _setupHandler = (pin, videoUrl, pinStatus) => {
+        console.debug(`PIN status: ${pinStatus}`);
+        pexrtc.connect(pin);
+      }
+
+      const _errorHandler = (err) => {
+        console.error({ err });
+      }
+
+      const _connectHandler = (videoUrl) => {
+        if (typeof MediaStream !== "undefined" && videoUrl instanceof MediaStream) {
+          videoElement.srcObject = videoUrl;
+        } else {
+          videoElement.src = videoUrl;
+        }
+      }
+
+      const _disconnectHandler = (reason) => {
+          console.debug({ reason });
+          window.removeEventListener("beforeunload", (...args) =>
+            _hangupHandler(...args)
+          );
+          window.close();
+      }
+
+      // Initiate a call
+      callAgentBtn.addEventListener("click", (evt) => {
+        console.log({ evt });
+
+        callControlsActive.classList.remove("d-none");
+        callControlsInactive.classList.add("d-none");
+        videoElementWrapper.classList.remove("d-none");
+
+        // Values pull from form
+        let confNode = confNodeText.value;
+        let confAlias = confAliasText.value;
+        let displayName = confDisplayNameText.value;
+        let pin = confPinText.value;
+
+        let bandwidth = 1264;
+
+        pexrtc = new PexRTC();
+        window.addEventListener("beforeunload", (...args) =>
+          _hangupHandler(...args)
+        );
+        pexrtc.onSetup = _setupHandler.bind(null, pin);
+        pexrtc.onError = _errorHandler;
+        pexrtc.onConnect = _connectHandler;
+        pexrtc.onDisconnect = _disconnectHandler;
+
+        pexrtc.makeCall(confNode, confAlias, displayName, bandwidth);
+      });
+
+      // Disconnect call and clean up variable space
+      callDisconnectBtn.addEventListener("click", (evt) => {
+        if (pexrtc) pexrtc.disconnect();
+        callControlsActive.classList.add("d-none");
+        callControlsInactive.classList.remove("d-none");
+        videoElementWrapper.classList.add("d-none");
+
+        pexrtc.onSetup = null;
+        pexrtc.onError = null;
+        pexrtc.onConnect = null;
+        pexrtc.onDisconnect = null;
+        pexrtc = null;
+      });
+    </script>
+</body>
+</html>
